@@ -53,7 +53,7 @@ class Registry(object):
             if gql_type:
                 if dict(items) != {
                         key: value.value for key, value
-                            in gql_type._meta.enum.__members__.items()}:
+                        in gql_type._meta.enum.__members__.items()}:
                     raise TypeError(
                         'Different enums with the same name {}'.format(name))
         else:
@@ -63,6 +63,7 @@ class Registry(object):
             gql_type = Enum(name, items)
             self._registry_enums[name] = gql_type
         return gql_type
+
 
 registry = None
 
