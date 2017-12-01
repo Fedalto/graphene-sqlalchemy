@@ -13,6 +13,16 @@ from .models import Article, Base, Editor, Pet, Reporter
 db = create_engine('sqlite:///test_sqlalchemy.sqlite3')
 
 
+def normalize(value):
+    """Convert nested ordered dicts ot normal dicts for better comparison."""
+    if isinstance(value, dict):
+        return {k: normalize(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [normalize(v) for v in value]
+    else:
+        return value
+
+
 @pytest.yield_fixture(scope='function')
 def session():
     reset_global_registry()
@@ -33,22 +43,33 @@ def session():
 
 
 def setup_fixtures(session):
-    pet = Pet(name='Lassie', pet_kind='dog')
-    session.add(pet)
-    reporter = Reporter(first_name='ABA', last_name='X')
+    reporter = Reporter(
+        first_name='John', last_name='Doe', favorite_pet_kind='cat')
     session.add(reporter)
-    reporter2 = Reporter(first_name='ABO', last_name='Y')
-    session.add(reporter2)
+    pet = Pet(name='Garfield', pet_kind='cat')
+    session.add(pet)
+    pet.reporters.append(reporter)
     article = Article(headline='Hi!')
     article.reporter = reporter
     session.add(article)
-    editor = Editor(name="John")
+    reporter = Reporter(
+        first_name='Jane', last_name='Roe', favorite_pet_kind='dog')
+    session.add(reporter)
+    pet = Pet(name='Lassie', pet_kind='dog')
+    pet.reporters.append(reporter)
+    session.add(pet)
+    editor = Editor(name="Jack")
     session.add(editor)
     session.commit()
 
 
 def test_should_query_well(session):
     setup_fixtures(session)
+
+    class PetType(SQLAlchemyObjectType):
+
+        class Meta:
+            model = Pet
 
     class ReporterType(SQLAlchemyObjectType):
 
@@ -58,75 +79,68 @@ def test_should_query_well(session):
     class Query(graphene.ObjectType):
         reporter = graphene.Field(ReporterType)
         reporters = graphene.List(ReporterType)
+        pets = graphene.List(PetType, kind=graphene.Argument(
+            PetType._meta.fields['pet_kind'].type))
 
-        def resolve_reporter(self, *args, **kwargs):
+        def resolve_reporter(self, _info):
             return session.query(Reporter).first()
 
-        def resolve_reporters(self, *args, **kwargs):
+        def resolve_reporters(self, _info):
             return session.query(Reporter)
+
+        def resolve_pets(self, _info, kind):
+            query = session.query(Pet)
+            if kind:
+                query = query.filter_by(pet_kind=kind)
+            return query
 
     query = '''
         query ReporterQuery {
           reporter {
             firstName,
             lastName,
-            email
+            email,
+            favoritePetKind,
+            pets {
+              name
+              petKind
+            }
           }
           reporters {
             firstName
           }
-        }
-    '''
-    expected = {
-        'reporter': {
-            'firstName': 'ABA',
-            'lastName': 'X',
-            'email': None
-        },
-        'reporters': [{
-            'firstName': 'ABA',
-        }, {
-            'firstName': 'ABO',
-        }]
-    }
-    schema = graphene.Schema(query=Query)
-    result = schema.execute(query)
-    assert not result.errors
-    assert result.data == expected
-
-
-def test_should_query_enums(session):
-    setup_fixtures(session)
-
-    class PetType(SQLAlchemyObjectType):
-
-        class Meta:
-            model = Pet
-
-    class Query(graphene.ObjectType):
-        pet = graphene.Field(PetType)
-
-        def resolve_pet(self, *args, **kwargs):
-            return session.query(Pet).first()
-
-    query = '''
-        query PetQuery {
-          pet {
-            name,
+          pets(kind: DOG) {
+            name
             petKind
           }
         }
     '''
     expected = {
-        'pet': {
+        'reporter': {
+            'firstName': 'John',
+            'lastName': 'Doe',
+            'email': None,
+            'favoritePetKind': 'CAT',
+            'pets': [{
+                'name': 'Garfield',
+                'petKind': 'CAT'
+            }]
+        },
+        'reporters': [{
+            'firstName': 'John',
+        }, {
+            'firstName': 'Jane',
+        }],
+        'pets': [{
             'name': 'Lassie',
-            'petKind': 'dog'
-        }
+            'petKind': 'DOG'
+        }]
     }
     schema = graphene.Schema(query=Query)
     result = schema.execute(query)
     assert not result.errors
-    assert result.data == expected, result.data
+    result = normalize(result.data)
+    assert result == expected
 
 
 def test_should_node(session):
@@ -158,10 +172,10 @@ def test_should_node(session):
         article = graphene.Field(ArticleNode)
         all_articles = SQLAlchemyConnectionField(ArticleNode)
 
-        def resolve_reporter(self, *args, **kwargs):
+        def resolve_reporter(self, _info):
             return session.query(Reporter).first()
 
-        def resolve_article(self, *args, **kwargs):
+        def resolve_article(self, _info):
             return session.query(Article).first()
 
     query = '''
@@ -200,8 +214,8 @@ def test_should_node(session):
     expected = {
         'reporter': {
             'id': 'UmVwb3J0ZXJOb2RlOjE=',
-            'firstName': 'ABA',
-            'lastName': 'X',
+            'firstName': 'John',
+            'lastName': 'Doe',
             'email': None,
             'articles': {
                 'edges': [{
@@ -226,7 +240,8 @@ def test_should_node(session):
     schema = graphene.Schema(query=Query)
     result = schema.execute(query, context_value={'session': session})
     assert not result.errors
-    assert result.data == expected
+    result = normalize(result.data)
+    assert result == expected
 
 
 def test_should_custom_identifier(session):
@@ -264,12 +279,12 @@ def test_should_custom_identifier(session):
             'edges': [{
                 'node': {
                     'id': 'RWRpdG9yTm9kZTox',
-                    'name': 'John'
+                    'name': 'Jack'
                 }
             }]
         },
         'node': {
-            'name': 'John'
+            'name': 'Jack'
         }
     }
 
@@ -355,7 +370,7 @@ def test_should_mutate_well(session):
                 'headline': 'My Article',
                 'reporter': {
                     'id': 'UmVwb3J0ZXJOb2RlOjE=',
-                    'firstName': 'ABA'
+                    'firstName': 'John'
                 }
             }
         },
@@ -364,4 +379,6 @@ def test_should_mutate_well(session):
     schema = graphene.Schema(query=Query, mutation=Mutation)
     result = schema.execute(query, context_value={'session': session})
     assert not result.errors
-    assert result.data == expected
+    result = normalize(result.data)
+    assert result == expected
+

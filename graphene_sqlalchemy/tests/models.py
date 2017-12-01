@@ -1,7 +1,5 @@
 from __future__ import absolute_import
 
-import enum
-
 from sqlalchemy import Column, Date, Enum, ForeignKey, Integer, String, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import mapper, relationship
@@ -11,6 +9,9 @@ Base = declarative_base()
 association_table = Table('association', Base.metadata,
                           Column('pet_id', Integer, ForeignKey('pets.id')),
                           Column('reporter_id', Integer, ForeignKey('reporters.id')))
+
+
+PetKind = Enum('cat', 'dog', name='pet_kind_enum')
 
 
 class Editor(Base):
@@ -23,8 +24,7 @@ class Pet(Base):
     __tablename__ = 'pets'
     id = Column(Integer(), primary_key=True)
     name = Column(String(30))
-    pet_kind = Column(Enum('cat', 'dog', name='pet_kind'), nullable=False)
-    reporter_id = Column(Integer(), ForeignKey('reporters.id'))
+    pet_kind = Column(PetKind, nullable=False)
 
 
 class Reporter(Base):
@@ -33,6 +33,7 @@ class Reporter(Base):
     first_name = Column(String(30))
     last_name = Column(String(30))
     email = Column(String())
+    favorite_pet_kind = Column(PetKind)
     pets = relationship('Pet', secondary=association_table, backref='reporters')
     articles = relationship('Article', backref='reporter')
     favorite_article = relationship("Article", uselist=False)

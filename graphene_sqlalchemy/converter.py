@@ -131,12 +131,12 @@ def convert_column_to_float(type, column, registry=None):
 
 
 @convert_sqlalchemy_type.register(types.Enum)
-def convert_enum_to_enum(type, column, registry=None):
-    try:
-        items = type.enum_class.__members__.items()
-    except AttributeError:
-        items = zip(type.enums, type.enums)
-    return Field(Enum(type.name, items),
+def convert_column_to_enum(type, column, registry=None):
+    if registry is None:
+        from .registry import get_global_registry
+        registry = get_global_registry()
+    type = registry.get_type_for_enum(type)
+    return Field(type,
                  description=get_column_doc(column),
                  required=not(is_column_nullable(column)))
 
