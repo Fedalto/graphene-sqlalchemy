@@ -81,9 +81,9 @@ def test_should_unicodetext_convert_string():
 
 def test_should_enum_convert_enum():
     field = assert_column_conversion(
-        types.Enum(enum.Enum('TwoNumbersPyEnum', 'one two')), graphene.Field)
+        types.Enum('one', 'two'), graphene.Field)
     field_type = field.type()
-    assert field_type.__class__.__name__ == 'TwoNumbersPyEnum'
+    assert field_type.__class__.__name__.startswith('Enum')
     assert isinstance(field_type, graphene.Enum)
     assert hasattr(field_type, 'ONE')
     assert not hasattr(field_type, 'one')
@@ -96,6 +96,28 @@ def test_should_enum_convert_enum():
     assert hasattr(field_type, 'ONE')
     assert not hasattr(field_type, 'one')
     assert hasattr(field_type, 'TWO')
+    field = assert_column_conversion(
+        types.Enum(enum.Enum('TwoNumbersPyEnum', 'one two')), graphene.Field)
+    field_type = field.type()
+    assert field_type.__class__.__name__ == 'TwoNumbersPyEnum'
+    assert isinstance(field_type, graphene.Enum)
+    assert hasattr(field_type, 'ONE')
+    assert not hasattr(field_type, 'one')
+    assert hasattr(field_type, 'TWO')
+
+
+def test_should_conflicting_enum_raise_error():
+    some_type = types.Enum(enum.Enum('ConflictingEnum', 'cat cow'))
+    field = assert_column_conversion(some_type, graphene.Field)
+    field_type = field.type()
+    assert isinstance(field_type, graphene.Enum)
+    assert hasattr(field_type, 'COW')
+    same_type = types.Enum(enum.Enum('ConflictingEnum', 'cat cow'))
+    field = assert_column_conversion(same_type, graphene.Field)
+    assert field_type == field.type()
+    conflicting_type = types.Enum(enum.Enum('ConflictingEnum', 'cat horse'))
+    with raises(TypeError):
+        assert_column_conversion(conflicting_type, graphene.Field)
 
 
 def test_should_small_integer_convert_int():

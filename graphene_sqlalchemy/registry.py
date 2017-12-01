@@ -44,21 +44,19 @@ class Registry(object):
             items = [(key.upper(), value.value)
                      for key, value in sql_type.enum_class.__members__.items()]
         else:
-            name = to_type_name(sql_type.name)
-            if not name:
+            name = sql_type.name
+            if name:
+                name = to_type_name(name)
+            else:
                 name = 'Enum{}'.format(len(self._registry_enums) + 1)
             items = [(key.upper(), key) for key in sql_type.enums]
-        if name:
-            gql_type = self._registry_enums.get(name)
-            if gql_type:
-                if dict(items) != {
-                        key: value.value for key, value
-                        in gql_type._meta.enum.__members__.items()}:
-                    raise TypeError(
-                        'Different enums with the same name {}'.format(name))
-        else:
-            name = 'Enum{}'.format(len(self._registry_enums) + 1)
-            gql_type = None
+        gql_type = self._registry_enums.get(name)
+        if gql_type:
+            if dict(items) != {
+                    key: value.value for key, value
+                    in gql_type._meta.enum.__members__.items()}:
+                raise TypeError(
+                    'Different enums with the same name {}'.format(name))
         if not gql_type:
             gql_type = Enum(name, items)
             self._registry_enums[name] = gql_type
