@@ -34,3 +34,7 @@ def is_mapped_instance(cls):
         return False
     else:
         return True
+
+
+def to_type_name(name):
+    return ''.join(part[:1].upper() + part[1:] for part in name.split('_'))

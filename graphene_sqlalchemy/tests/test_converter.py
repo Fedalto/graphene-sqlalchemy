@@ -81,16 +81,43 @@ def test_should_unicodetext_convert_string():
 
 def test_should_enum_convert_enum():
     field = assert_column_conversion(
-        types.Enum(enum.Enum('one', 'two')), graphene.Field)
+        types.Enum('one', 'two'), graphene.Field)
     field_type = field.type()
+    assert field_type.__class__.__name__.startswith('Enum')
     assert isinstance(field_type, graphene.Enum)
-    assert hasattr(field_type, 'two')
+    assert hasattr(field_type, 'ONE')
+    assert not hasattr(field_type, 'one')
+    assert hasattr(field_type, 'TWO')
     field = assert_column_conversion(
-        types.Enum('one', 'two', name='two_numbers'), graphene.Field)
+        types.Enum('one', 'two', name='two_numbers_db_enum'), graphene.Field)
     field_type = field.type()
-    assert field_type.__class__.__name__ == 'two_numbers'
+    assert field_type.__class__.__name__ == 'TwoNumbersDbEnum'
     assert isinstance(field_type, graphene.Enum)
-    assert hasattr(field_type, 'two')
+    assert hasattr(field_type, 'ONE')
+    assert not hasattr(field_type, 'one')
+    assert hasattr(field_type, 'TWO')
+    field = assert_column_conversion(
+        types.Enum(enum.Enum('TwoNumbersPyEnum', 'one two')), graphene.Field)
+    field_type = field.type()
+    assert field_type.__class__.__name__ == 'TwoNumbersPyEnum'
+    assert isinstance(field_type, graphene.Enum)
+    assert hasattr(field_type, 'ONE')
+    assert not hasattr(field_type, 'one')
+    assert hasattr(field_type, 'TWO')
+
+
+def test_should_conflicting_enum_raise_error():
+    some_type = types.Enum(enum.Enum('ConflictingEnum', 'cat cow'))
+    field = assert_column_conversion(some_type, graphene.Field)
+    field_type = field.type()
+    assert isinstance(field_type, graphene.Enum)
+    assert hasattr(field_type, 'COW')
+    same_type = types.Enum(enum.Enum('ConflictingEnum', 'cat cow'))
+    field = assert_column_conversion(same_type, graphene.Field)
+    assert field_type == field.type()
+    conflicting_type = types.Enum(enum.Enum('ConflictingEnum', 'cat horse'))
+    with raises(TypeError):
+        assert_column_conversion(conflicting_type, graphene.Field)
 
 
 def test_should_small_integer_convert_int():
@@ -262,11 +289,11 @@ def test_should_postgresql_uuid_convert():
 
 def test_should_postgresql_enum_convert():
     field = assert_column_conversion(postgresql.ENUM(
-        enum.Enum('one', 'two'), name='two_numbers'), graphene.Field)
+        enum.Enum('TwoNumbers', 'one two')), graphene.Field)
     field_type = field.type()
-    assert field_type.__class__.__name__ == 'two_numbers'
+    assert field_type.__class__.__name__ == 'TwoNumbers'
     assert isinstance(field_type, graphene.Enum)
-    assert hasattr(field_type, 'two')
+    assert hasattr(field_type, 'TWO')
 
 
 def test_should_postgresql_array_convert():
